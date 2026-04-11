@@ -5,3 +5,4 @@ uvicorn
 asyncpg
 redis
 python-jose
+python-multipart

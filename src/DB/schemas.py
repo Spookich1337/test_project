@@ -4,9 +4,10 @@ from .DBconfig import UserRole
 
 
 class UserBase(BaseModel):
-    role: UserRole
+    name: str
     email: str
     password: str
+    role: UserRole
 
 
 class UserResponse(UserBase):
@@ -19,6 +20,7 @@ class UserCreate(UserBase):
 
 class UserUpdate(UserBase):
     id: int
+    name: Optional[str] = None
     role: Optional[UserRole] = None
     email: Optional[str] = None
     password: Optional[str] = None
@@ -26,7 +28,7 @@ class UserUpdate(UserBase):
 
 class NoteBase(BaseModel):
     text: str
-    in_black_list: bool
+    for_admin: bool
     
 
 class NoteResponse(NoteBase):
@@ -40,4 +42,4 @@ class NoteCreate(NoteBase):
 class NoteUpdate(NoteBase):
     id: int
     text: Optional[str] = None
-    in_black_list: Optional[bool] = None
+    for_admin: Optional[bool] = None

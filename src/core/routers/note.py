@@ -5,19 +5,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.DB.DBconfig import *
 from src.DB.schemas import NoteCreate, NoteResponse, NoteUpdate
+from .security import get_role
 
 
 router = APIRouter(prefix="/note", tags=["note api"])
 
 
 @router.get("/{id}", response_model=NoteResponse)
-async def get_note(id:int, db:AsyncSession = Depends(get_db)):
+async def get_note(id:int, role:str = Depends(get_role(["admin", "user"])), db:AsyncSession = Depends(get_db)):
     note_query = await db.execute(select(Note).where(Note.id == id))
     note = note_query.scalars().first()
     if not note:
         raise HTTPException(
             detail="Not found note with this id",
             status_code=status.HTTP_404_NOT_FOUND
+        )
+    if (note.for_admin == True) and (role != "admin"):
+        raise HTTPException(
+            detail="Do not have permission to access",
+            status_code=status.HTTP_403_FORBIDDEN
         )
     return note
 

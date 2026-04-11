@@ -5,14 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.DB.DBconfig import *
 from src.DB.schemas import UserCreate, UserResponse, UserUpdate
-from .security import get_role
 
 
 router = APIRouter(prefix="/user", tags=["user api"])
 
 
 @router.get("/{id}", response_model=UserResponse)
-async def get_user(id:int, role:str = Depends(get_role(["admin"])), db:AsyncSession = Depends(get_db)):
+async def get_user(id:int, db:AsyncSession = Depends(get_db)):
     user_query = await db.execute(select(User).where(User.id == id))
     user = user_query.scalars().first()
     if not user:
@@ -22,7 +21,7 @@ async def get_user(id:int, role:str = Depends(get_role(["admin"])), db:AsyncSess
         )
     return user
 
-@router.post("/", response_model=UserResponse, dependencies=[Depends(get_role(["admin"]))])
+@router.post("/", response_model=UserResponse)
 async def post_user(data:UserCreate, db:AsyncSession = Depends(get_db)):
     user_query = await db.execute(select(User).where(User.email == data.email))
     user = user_query.scalars().first()
