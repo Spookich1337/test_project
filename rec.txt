@@ -1,0 +1,7 @@
+fastapi
+pydantic
+sqlalchemy
+uvicorn
+asyncpg
+redis
+python-jose
