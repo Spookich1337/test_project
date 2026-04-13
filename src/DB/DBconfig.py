@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import Integer, String, Boolean, Enum as SQLAEnum
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Integer, String, Boolean, Enum as SQLAEnum, ForeignKey
 from enum import Enum
 
 
@@ -45,10 +45,13 @@ class User(BaseModel):
     role: Mapped[str] = mapped_column(SQLAEnum(UserRole), default=UserRole.USER, nullable=False)
     email: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     password: Mapped[str] = mapped_column(String(32), nullable=False)
+    notes: Mapped[list["Note"]] = relationship(back_populates="author", cascade="all, delete-orphan")
 
 
 class Note(BaseModel):
     __tablename__ = "notes"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    author: Mapped["User"] = relationship(back_populates="notes")
     text: Mapped[str] = mapped_column(String(64), unique=True)
     for_admin: Mapped[bool] = mapped_column(Boolean(), default=False)

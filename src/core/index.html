@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoteApp - Лента заметок</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <nav class="bg-blue-600 text-white p-4 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold">NoteApp</h1>
+            <div id="auth-buttons">
+                <button onclick="showSection('login')" class="px-4 hover:underline">Вход</button>
+                <button onclick="showSection('register')" class="px-4 border border-white rounded hover:bg-white hover:text-blue-600 transition">Регистрация</button>
+            </div>
+            <div id="user-menu" class="hidden">
+                <span id="user-email" class="mr-4 italic"></span>
+                <button onclick="logout()" class="bg-red-500 px-4 py-2 rounded hover:bg-red-700">Выход</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto mt-10 p-4 max-w-2xl">
+        
+        <section id="login-section" class="bg-white p-8 rounded shadow-md">
+            <h2 class="text-xl font-bold mb-4">Вход в систему</h2>
+            <input type="email" id="login-email" placeholder="Email" class="w-full p-2 mb-2 border rounded">
+            <input type="password" id="login-pass" placeholder="Пароль" class="w-full p-2 mb-4 border rounded">
+            <button onclick="login()" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Войти</button>
+        </section>
+
+        <section id="register-section" class="hidden bg-white p-8 rounded shadow-md">
+            <h2 class="text-xl font-bold mb-4">Регистрация</h2>
+            <input type="text" id="reg-name" placeholder="Имя" class="w-full p-2 mb-2 border rounded">
+            <input type="email" id="reg-email" placeholder="Email" class="w-full p-2 mb-2 border rounded">
+            <input type="password" id="reg-pass" placeholder="Пароль" class="w-full p-2 mb-2 border rounded">
+            <select id="reg-role" class="w-full p-2 mb-4 border rounded bg-white">
+                <option value="user">Пользователь (user)</option>
+                <option value="admin">Администратор (admin)</option>
+            </select>
+            <button onclick="register()" class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700">Создать аккаунт</button>
+        </section>
+
+        <section id="notes-section" class="hidden">
+            <div class="bg-white p-6 rounded shadow-md mb-6">
+                <textarea id="note-text" placeholder="Текст новой заметки..." class="w-full p-2 border rounded mb-2"></textarea>
+                <div class="flex items-center mb-4">
+                    <input type="checkbox" id="note-admin" class="mr-2 w-4 h-4 text-blue-600">
+                    <label for="note-admin" class="text-gray-700">Скрытая заметка (только для админов)</label>
+                </div>
+                <button onclick="createNote()" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">Опубликовать</button>
+            </div>
+
+            <h2 class="text-xl font-bold mb-4">Лента заметок</h2>
+            <div id="notes-list" class="space-y-4">
+                </div>
+        </section>
+    </div>
+
+    <script>
+        const API_URL = "http://localhost:8070"; // Проверь свой порт!
+        let accessToken = localStorage.getItem('token');
+
+        // Вспомогательная функция для обработки ошибок от FastAPI
+        function parseError(errData) {
+            if (errData.detail && Array.isArray(errData.detail)) {
+                return errData.detail.map(e => `${e.loc.join('->')}: ${e.msg}`).join('\n');
+            }
+            return errData.detail || "Неизвестная ошибка";
+        }
+
+        function showSection(name) {
+            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+            document.getElementById(`${name}-section`).classList.remove('hidden');
+        }
+
+        async function login() {
+            const email = document.getElementById('login-email').value;
+            const pass = document.getElementById('login-pass').value;
+
+            const formData = new FormData();
+            formData.append('username', email);
+            formData.append('password', pass);
+
+            try {
+                const res = await fetch(`${API_URL}/auth/`, { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (res.ok) {
+                    accessToken = data.access_token;
+                    localStorage.setItem('token', accessToken);
+                    initApp();
+                } else {
+                    alert("Ошибка входа: " + parseError(data));
+                }
+            } catch (e) {
+                alert("Ошибка соединения с сервером. Проверьте CORS.");
+            }
+        }
+
+        async function register() {
+            const body = {
+                name: document.getElementById('reg-name').value,
+                email: document.getElementById('reg-email').value,
+                password: document.getElementById('reg-pass').value,
+                role: document.getElementById('reg-role').value // Отправляем роль!
+            };
+
+            const res = await fetch(`${API_URL}/users/`, { // ИЗМЕНЕНО: /user/s/ -> /users/
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (res.ok) {
+                alert("Аккаунт создан! Теперь войдите.");
+                showSection('login');
+            } else {
+                const err = await res.json();
+                alert("Ошибка регистрации:\n" + parseError(err));
+            }
+        }
+
+        async function loadNotes() {
+            // ИЗМЕНЕНО: /note/s/ -> /notes/
+            const res = await fetch(`${API_URL}/notes/?size=20&page=1`, {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            
+            if (res.status === 401 || res.status === 403) {
+                logout();
+                return;
+            }
+            
+            const data = await res.json();
+            const list = document.getElementById('notes-list');
+            list.innerHTML = '';
+
+            // Из-за схемы NoteList мы берем массив из data.notes
+            data.notes.forEach(note => {
+                const div = document.createElement('div');
+                div.className = "bg-white p-4 rounded shadow border-l-4 " + (note.for_admin ? "border-red-500" : "border-blue-500");
+                div.innerHTML = `
+                    <p class="text-gray-800 text-lg">${note.text}</p>
+                    <div class="text-sm text-gray-500 mt-3 flex justify-between items-center border-t pt-2">
+                        <span>ID автора: <span class="font-bold">${note.user_id}</span> ${note.for_admin ? '<span class="text-red-500 ml-2">🔒 Только для админов</span>' : ''}</span>
+                        <button onclick="deleteNote(${note.id})" class="text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded transition">Удалить</button>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        async function createNote() {
+            const text = document.getElementById('note-text').value;
+            const forAdmin = document.getElementById('note-admin').checked;
+            
+            if (!text) {
+                alert("Введите текст заметки!");
+                return;
+            }
+
+            // Получаем payload из JWT
+            const payload = JSON.parse(atob(accessToken.split('.')[1]));
+            
+            // ИЗМЕНЕНО: /note/s/ -> /notes/
+            const res = await fetch(`${API_URL}/notes/`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`
+                },
+                body: JSON.stringify({ 
+                    text: text, 
+                    for_admin: forAdmin, 
+                    user_id: parseInt(payload.sub) // Отправляем ID как требует схема
+                })
+            });
+
+            if (res.ok) {
+                document.getElementById('note-text').value = '';
+                document.getElementById('note-admin').checked = false;
+                loadNotes();
+            } else {
+                const err = await res.json();
+                alert("Ошибка создания:\n" + parseError(err));
+            }
+        }
+
+        async function deleteNote(id) {
+            if (!confirm("Точно удалить заметку?")) return;
+            
+            // ИЗМЕНЕНО: /note/s/?id= -> /notes/?id=
+            const res = await fetch(`${API_URL}/notes/?id=${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            
+            if (res.ok) {
+                loadNotes();
+            } else {
+                const err = await res.json();
+                alert("Ошибка удаления:\n" + parseError(err));
+            }
+        }
+
+        function logout() {
+            // Опционально: можно добавить запрос к /auth/logout для очистки Redis
+            localStorage.removeItem('token');
+            accessToken = null;
+            location.reload();
+        }
+
+        function initApp() {
+            if (accessToken) {
+                document.getElementById('auth-buttons').classList.add('hidden');
+                document.getElementById('user-menu').classList.remove('hidden');
+                showSection('notes');
+                loadNotes();
+            } else {
+                showSection('login');
+            }
+        }
+
+        // Запуск при загрузке страницы
+        initApp();
+    </script>
+</body>
+</html>

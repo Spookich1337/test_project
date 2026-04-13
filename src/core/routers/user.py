@@ -4,17 +4,39 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.DB.DBconfig import *
-from src.DB.schemas import UserCreate, UserResponse, UserUpdate
+from src.DB.schemas import UserCreate, UserResponse, UserUpdate, UserList
+from .security import get_role, check_access_token
 
 
-router = APIRouter(prefix="/user", tags=["user api"])
+router = APIRouter(prefix="/users", tags=["user api"])
+
+
+@router.get("/", response_model=UserList)
+async def get_users_list(size:int, page:int, role:str = Depends(get_role(["admin"])), db:AsyncSession = Depends(get_db)):
+    users_query = await db.execute(select(User).order_by(User.id).limit(size).offset((page-1)*size))
+    users = users_query.scalars().all()
+    if not users:
+        raise HTTPException(
+            detail="Not found any user",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+    count = len(users)
+    return {
+        "count":count,
+        "users":users
+    }
 
 
 @router.get("/{id}", response_model=UserResponse)
-async def get_user(id:int, db:AsyncSession = Depends(get_db)):
+async def get_user(id:int, payload:dict = Depends(check_access_token), db:AsyncSession = Depends(get_db)):
     user_query = await db.execute(select(User).where(User.id == id))
     user = user_query.scalars().first()
     if not user:
+        raise HTTPException(
+            detail="Not found user with this id",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+    if user.id != int(payload.get("sub")) and payload.get("role") != "admin":
         raise HTTPException(
             detail="Not found user with this id",
             status_code=status.HTTP_404_NOT_FOUND
@@ -45,10 +67,15 @@ async def post_user(data:UserCreate, db:AsyncSession = Depends(get_db)):
 
 
 @router.put("/", response_model=UserResponse)
-async def put_user(data:UserUpdate, db:AsyncSession = Depends(get_db)):
+async def put_user(data:UserUpdate, payload:dict = Depends(check_access_token), db:AsyncSession = Depends(get_db)):
     user_query = await db.execute(select(User).where(User.id == data.id))
     user = user_query.scalars().first()
     if not user:
+        raise HTTPException(
+            detail="Not found user with this id",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+    if user.id != int(payload.get("sub")) and payload.get("role") != "admin":
         raise HTTPException(
             detail="Not found user with this id",
             status_code=status.HTTP_404_NOT_FOUND
@@ -68,11 +95,16 @@ async def put_user(data:UserUpdate, db:AsyncSession = Depends(get_db)):
     return user
 
 
-@router.delete("/{id}")
-async def delete_user(id:int, db:AsyncSession = Depends(get_db)):
+@router.delete("/")
+async def delete_user(id:int, payload:dict = Depends(check_access_token), db:AsyncSession = Depends(get_db)):
     user_query = await db.execute(select(User).where(User.id == id))
     user = user_query.scalars().first()
     if not user:
+        raise HTTPException(
+            detail="Not found user with this id",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+    if user.id != int(payload.get("sub")) and payload.get("role") != "admin":
         raise HTTPException(
             detail="Not found user with this id",
             status_code=status.HTTP_404_NOT_FOUND

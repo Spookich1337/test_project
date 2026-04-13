@@ -26,7 +26,13 @@ class UserUpdate(UserBase):
     password: Optional[str] = None
 
 
+class UserList(BaseModel):
+    count: int
+    users: list[UserResponse]
+
+
 class NoteBase(BaseModel):
+    user_id: int
     text: str
     for_admin: bool
     
@@ -43,3 +49,8 @@ class NoteUpdate(NoteBase):
     id: int
     text: Optional[str] = None
     for_admin: Optional[bool] = None
+
+
+class NoteList(BaseModel):
+    count: int
+    notes: list[NoteResponse]
